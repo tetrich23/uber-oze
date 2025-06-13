@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Logowanie – NASZ PRĄD</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      background: url('tlo1.png') no-repeat center center fixed;
+      background-size: cover;
+      font-family: Arial, sans-serif;
+      margin: 0;
+    }
+    
+    }
+    header img { height: 40px; }
+    main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+}
+
+form {
+  width: 350px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+    input {
+      display: block; width: 100%; padding: 10px; margin-bottom: 15px;
+      font-size: 16px; border-radius: 8px; border: 1px solid #ccc;
+    }
+    button {
+      width: 100%; background-color: #336633; color: white;
+      font-size: 16px; padding: 12px; border: none; border-radius: 8px;
+    }
+    .error { color: red; font-weight: bold; text-align: center; }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<main>
+  <form onsubmit="event.preventDefault(); zaloguj();">
+    <input type="text" id="login" placeholder="Numer użytkownika (np. agent002)" required />
+    <input type="password" id="kod" placeholder="Hasło" required />
+    <button type="submit">Zaloguj</button>
+    <p id="komunikat" class="error"></p>
+  </form>
+</main>
+
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIwz2juFmcNOVorEywVj8U040GgT3euVQ",
+      authDomain: "mesi-a81c4.firebaseapp.com",
+      projectId: "mesi-a81c4",
+      storageBucket: "mesi-a81c4.appspot.com",
+      messagingSenderId: "291235707667",
+      appId: "1:291235707667:web:66d7f1e079321c5306f8e6"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    async function zaloguj() {
+      const login = document.getElementById("login").value.trim();
+      const kod = document.getElementById("kod").value.trim();
+      const komunikat = document.getElementById("komunikat");
+
+      komunikat.textContent = "";
+
+      if (!login || !kod) {
+        komunikat.textContent = "Wpisz login i kod.";
+        return;
+      }
+
+      try {
+        const doc = await db.collection("users").doc(login).get();
+        if (!doc.exists) {
+          komunikat.textContent = "Nieprawidłowy login.";
+          return;
+        }
+
+        const data = doc.data();
+        if (data.kod !== kod) {
+          komunikat.textContent = "Nieprawidłowy kod dostępu.";
+          return;
+        }
+
+        localStorage.setItem("user", login);
+        localStorage.setItem("rola", data.rola);
+
+        if (data.rola === "agent") {
+        window.location.href = "agent.html";
+        } else if (data.rola === "callcenter") {
+        window.location.href = "callcenter.html";
+        } else if (data.rola === "admin") {
+        window.location.href = "admin.html";
+        } else {
+        komunikat.textContent = "Nieznana rola.";
+}
+      } catch (error) {
+        komunikat.textContent = "Błąd logowania.";
+        console.error(error);
+      }
+    }
+  </script>
+</body>
+</html>
