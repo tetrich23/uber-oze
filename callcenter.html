@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Call Center - Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .menu {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .menu button {
+      padding: 10px 20px;
+      margin: 0 5px;
+      background-color: #336633;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .menu button:hover {
+      background-color: #274d27;
+    }
+    .section {
+      display: none;
+    }
+    .section.active {
+      display: block;
+    }
+    .task {
+      background-color: #fff;
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    button.save {
+      background-color: #007bff;
+      margin-top: 15px;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <h1>Panel Call Center</h1>
+  <div class="menu">
+    <button onclick="showSection('dodaj')">➕ Dodaj zgłoszenie</button>
+    <button onclick="showSection('aktualne')">📋 Aktualne zgłoszenia</button>
+    <button onclick="showSection('historia')">📜 Historia zgłoszeń</button>
+  </div>
+
+  <div id="dodaj" class="section active">
+    <form id="form">
+      <label>Imię i nazwisko klienta: <input id="name" /></label>
+      <label>Numer telefonu: <input id="phone" /></label>
+      <label>Miasto: <input id="miasto" /></label>
+      <label>Ulica: <input id="ulica" /></label>
+      <label>Kod pocztowy: <input id="kod" /></label>
+      <label>Twój login (np. call001): <input id="utworzonyPrzez" /></label>
+      <button type="button" class="save" onclick="saveTask()">Zapisz zgłoszenie</button>
+    </form>
+  </div>
+
+  <div id="aktualne" class="section">
+    <h2>📋 Aktualne zgłoszenia</h2>
+    <div id="aktualneContainer"></div>
+  </div>
+
+  <div id="historia" class="section">
+    <h2>📜 Historia zrealizowanych zgłoszeń</h2>
+    <div id="historiaContainer"></div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIwz2juFmcNOVorEywVj8U040GgT3euVQ",
+      authDomain: "mesi-a81c4.firebaseapp.com",
+      projectId: "mesi-a81c4",
+      storageBucket: "mesi-a81c4.firebasestorage.app",
+      messagingSenderId: "291235707667",
+      appId: "1:291235707667:web:66d7f1e079321c5306f8e6",
+      measurementId: "G-JPLD8X2C53"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    function showSection(id) {
+      document.querySelectorAll(".section").forEach(sec => sec.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+      if (id === "aktualne") loadTasks("Dostępne", "aktualneContainer");
+      if (id === "historia") loadTasks("Zrealizowane", "historiaContainer");
+    }
+
+    async function saveTask() {
+      const name = document.getElementById("name").value;
+      const phone = document.getElementById("phone").value;
+      const miasto = document.getElementById("miasto").value;
+      const ulica = document.getElementById("ulica").value;
+      const kod = document.getElementById("kod").value;
+      const utworzonyPrzez = document.getElementById("utworzonyPrzez").value;
+
+      if (!name || !phone || !miasto || !ulica || !kod || !utworzonyPrzez) {
+        alert("Uzupełnij wszystkie pola.");
+        return;
+      }
+
+      await db.collection("tasks").add({
+        name,
+        phone,
+        miasto,
+        ulica,
+        kod,
+        utworzonyPrzez,
+        status: "Dostępne",
+        data: new Date().toLocaleString("pl-PL"),
+        utworzono: new Date()
+      });
+
+      alert("Zgłoszenie zapisane!");
+      document.getElementById("form").reset();
+    }
+
+    async function loadTasks(status, containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = "Wczytywanie...";
+
+      const q = db.collection("tasks").where("status", "==", status);
+      const snapshot = await q.get();
+      container.innerHTML = "";
+
+      if (snapshot.empty) {
+        container.innerHTML = "Brak zgłoszeń.";
+        return;
+      }
+
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        const div = document.createElement("div");
+        div.className = "task";
+div.innerHTML = `
+  <div><strong>${d.miasto}, ${d.ulica}</strong></div>
+  <div>📅 ${d.data || "-"}</div>
+  <div>☎️ ${d.phone || "-"}</div>
+  <div>👤 Dodane przez: ${d.utworzonyPrzez || "?"}</div>
+  ${d.raport ? `
+    <hr />
+    <div><strong>Raport agenta:</strong></div>
+    <div>✔️ Wynik: ${d.raport.wynik}</div>
+    <div>📝 Uwagi: ${d.raport.uwagi}</div>
+    <div>🕒 Data raportu: ${
+      d.raport.raportowano
+        ? new Date(d.raport.raportowano.toDate()).toLocaleString("pl-PL")
+        : "-"
+    }</div>
+  ` : ""}
+`;
+        container.appendChild(div);
+      });
+    }
+  </script>
+</body>
+</html>
