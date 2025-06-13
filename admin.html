@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Panel Administratora</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+    header { background: #1e3615; color: white; padding: 20px; text-align: center; }
+    nav { display: flex; justify-content: center; gap: 10px; background: #336633; padding: 10px; }
+    nav button {
+      background: white; color: #336633; border: none; padding: 10px 15px;
+      border-radius: 6px; cursor: pointer; font-weight: bold;
+    }
+    nav button:hover { background: #e6f1e6; }
+    section { display: none; padding: 20px; }
+    section.active { display: block; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #e0e0e0; cursor: pointer; }
+    .actions button { margin-right: 5px; }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <header><h1>Panel Administratora</h1></header>
+  <nav>
+    <button onclick="showSection('zgloszenia')">Zgłoszenia</button>
+    <button onclick="showSection('uzytkownicy')">Użytkownicy</button>
+    <button onclick="showSection('statystyki')">Statystyki</button>
+    <button onclick="showSection('eksport')">Eksport</button>
+    <button onclick="showSection('dodajUzytkownika')">Dodaj użytkownika</button>
+  </nav>
+
+  <section id="zgloszenia" class="active">
+    <table id="zgloszeniaTabela">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">Imię</th>
+          <th onclick="sortTable(1)">Telefon</th>
+          <th onclick="sortTable(2)">Miasto</th>
+          <th>Kto dodał</th>
+          <th>Agent</th>
+          <th>Status</th>
+          <th>Umowa</th>
+          <th>Data raportu</th>
+          <th>Akcje</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="uzytkownicy">
+    <table id="tabelaUzytkownicy">
+      <thead><tr><th>Login</th><th>Rola</th><th>Akcje</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="statystyki"><div id="statystykiContent">Wczytywanie...</div></section>
+  <section id="eksport"><button onclick="eksportCSV()">Pobierz CSV</button></section>
+  <section id="dodajUzytkownika">
+    <form onsubmit="dodajUzytkownika(); return false;">
+      <label>Login: <input id="nowyLogin" required /></label><br />
+      <label>Rola: <select id="nowaRola">
+        <option>agent</option><option>callcenter</option><option>admin</option>
+      </select></label><br />
+     <label>Kod: <input id="nowyKod" required /></label>
+      <button type="submit">Dodaj</button>
+    </form>
+  </section>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIwz2juFmcNOVorEywVj8U040GgT3euVQ",
+      authDomain: "mesi-a81c4.firebaseapp.com",
+      projectId: "mesi-a81c4",
+      storageBucket: "mesi-a81c4.appspot.com",
+      messagingSenderId: "291235707667",
+      appId: "1:291235707667:web:66d7f1e079321c5306f8e6"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    if (localStorage.getItem("rola") !== "admin") {
+      alert("Brak dostępu");
+      window.location.href = "index.html";
+    }
+
+    function showSection(id) {
+      document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    async function ladujZgloszenia() {
+      const tbody = document.querySelector("#zgloszeniaTabela tbody");
+      tbody.innerHTML = "Wczytywanie...";
+      const snapshot = await db.collection("tasks").get();
+      tbody.innerHTML = "";
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${d.name || ""}</td>
+          <td>${d.phone || ""}</td>
+          <td>${d.miasto || ""}</td>
+          <td>${d.utworzonyPrzez || ""}</td>
+          <td>${d.przypisanyAgent || ""}</td>
+          <td>${d.status || ""}</td>
+          <td>${d.raport?.wynik || ""}</td>
+          <td>${d.raport?.raportowano ? new Date(d.raport.raportowano.toDate()).toLocaleDateString("pl-PL") : ""}</td>
+          <td><button onclick="usunZgloszenie('${doc.id}')">Usuń</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function usunZgloszenie(id) {
+      if (confirm("Usunąć zgłoszenie?")) {
+        await db.collection("tasks").doc(id).delete();
+        ladujZgloszenia();
+      }
+    }
+
+    async function eksportCSV() {
+      const snapshot = await db.collection("tasks").get();
+      if (snapshot.empty) return alert("Brak danych");
+      let csv = "Imię,Telefon,Miasto,Ulica,Kod,Dodane przez,Agent,Status,Wynik,Uwagi,Utworzono,Przejęto,Raportowano\n";
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        csv += [
+          d.name, d.phone, d.miasto, d.ulica, d.kod, d.utworzonyPrzez, d.przypisanyAgent,
+          d.status, d.raport?.wynik, d.raport?.uwagi, d.data,
+          d.przejeto ? new Date(d.przejeto.toDate()).toLocaleString("pl-PL") : "",
+          d.raport?.raportowano ? new Date(d.raport.raportowano.toDate()).toLocaleString("pl-PL") : ""
+          ].map(v => `"\${(v || "").toString().replace(/"/g, '""')}"`).join(",") + "\n";
+          });
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "zgloszenia.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function dodajUzytkownika() {
+      const login = document.getElementById("nowyLogin").value.trim();
+      const rola = document.getElementById("nowaRola").value;
+      const kod = document.getElementById("nowyKod").value.trim();
+      if (!login || !kod) return alert("Błąd danych");
+      await db.collection("users").doc(login).set({ rola, kod });
+      alert("Użytkownik dodany");
+      ladujUzytkownikow();
+    }
+
+    async function usunUzytkownika(login) {
+      if (login === localStorage.getItem("user")) {
+        alert("Nie możesz usunąć samego siebie.");
+        return;
+      }
+      if (confirm(`Usunąć użytkownika "${login}"?`)) {
+        await db.collection("users").doc(login).delete();
+        alert("Użytkownik usunięty.");
+        ladujUzytkownikow();
+      }
+    }
+
+    async function ladujUzytkownikow() {
+      const tbody = document.querySelector("#tabelaUzytkownicy tbody");
+      const snap = await db.collection("users").get();
+      tbody.innerHTML = "";
+      snap.forEach(doc => {
+        const d = doc.data();
+        tbody.innerHTML += `
+          <tr>
+            <td>${doc.id}</td>
+            <td>${d.rola}</td>
+            <td><button onclick="usunUzytkownika('${doc.id}')">Usuń</button></td>
+          </tr>`;
+      });
+    }
+
+    async function pokazStatystyki() {
+      const el = document.getElementById("statystykiContent");
+      const snapshot = await db.collection("tasks").get();
+      let dzis = 0, tydzien = 0, agenci = new Set(), statusy = { Dostępne: 0, "W trakcie": 0, Zrealizowane: 0, Nieprzyjęte: 0 };
+      const teraz = new Date();
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        const data = d.utworzono?.toDate?.();
+        if (!data) return;
+        const diff = (teraz - data) / (1000 * 60 * 60 * 24);
+        if (diff < 1) dzis++;
+        if (diff < 7) tydzien++;
+        if (d.przypisanyAgent) agenci.add(d.przypisanyAgent);
+        if (statusy[d.status] !== undefined) statusy[d.status]++;
+        if (d.status === "Dostępne" && diff > 3) statusy.Nieprzyjęte++;
+      });
+
+      el.innerHTML = `
+        <p><b>Dzisiaj:</b> ${dzis}</p>
+        <p><b>Ostatnie 7 dni:</b> ${tydzien}</p>
+        <p><b>Aktywni agenci:</b> ${agenci.size}</p>
+        <p><b>Statusy:</b><br />
+        Dostępne: ${statusy["Dostępne"]}<br />
+        W trakcie: ${statusy["W trakcie"]}<br />
+        Zrealizowane: ${statusy["Zrealizowane"]}<br />
+        Nieprzyjęte (3+ dni): ${statusy["Nieprzyjęte"]}</p>`;
+    }
+
+    function sortTable(colIndex) {
+      const table = document.getElementById("zgloszeniaTabela");
+      const rows = Array.from(table.rows).slice(1);
+      const sorted = rows.sort((a, b) => a.cells[colIndex].textContent.localeCompare(b.cells[colIndex].textContent));
+      const tbody = table.tBodies[0];
+      tbody.innerHTML = "";
+      sorted.forEach(row => tbody.appendChild(row));
+    }
+
+    window.onload = () => {
+      ladujZgloszenia();
+      ladujUzytkownikow();
+      pokazStatystyki();
+    };
+  </script>
+</body>
+</html>
