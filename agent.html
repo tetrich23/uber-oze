@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Panel agenta</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { background: #f8f6ec; font-family: Arial; margin: 0; padding: 20px; }
+    h3 { margin-top: 30px; }
+    .card {
+      background: white; padding: 15px; margin-bottom: 15px;
+      border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    button {
+      background-color: #336633; color: white; border: none;
+      padding: 10px 15px; border-radius: 6px; cursor: pointer;
+      margin-top: 10px;
+    }
+    .modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%;
+      height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px;
+    }
+    input, select, textarea {
+      width: 100%; padding: 10px; margin-bottom: 12px;
+      border-radius: 6px; border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <h2>Panel agenta – <span id="agentLabel"></span></h2>
+    <button onclick="wyloguj()">Zmień agenta</button>
+  </div>
+
+  <h3>Dostępne zgłoszenia</h3>
+  <div id="dostepne"></div>
+
+  <h3>Moje zgłoszenia w toku</h3>
+  <div id="wtrakcie"></div>
+
+  <h3>Moje zrealizowane zgłoszenia</h3>
+  <div id="zrealizowane"></div>
+
+  <div class="modal" id="formularzModal">
+    <div class="modal-content">
+      <h3>Uzupełnij raport</h3>
+      <form id="formularzRaport">
+        <label>Czy umowa podpisana?</label>
+        <select id="umowa">
+          <option value="tak">Tak</option>
+          <option value="nie">Nie</option>
+          <option value="inne">Inne</option>
+        </select>
+        <label>Uwagi:</label>
+        <textarea id="uwagi" rows="4"></textarea>
+        <button type="submit">Zapisz raport</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIwz2juFmcNOVorEywVj8U040GgT3euVQ",
+      authDomain: "mesi-a81c4.firebaseapp.com",
+      projectId: "mesi-a81c4",
+      storageBucket: "mesi-a81c4.appspot.com",
+      messagingSenderId: "291235707667",
+      appId: "1:291235707667:web:66d7f1e079321c5306f8e6"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const agent = localStorage.getItem("user");
+    document.getElementById("agentLabel").textContent = agent || "Brak logowania";
+
+    if (!agent) {
+      alert("Nie jesteś zalogowany.");
+      window.location.href = "index.html";
+    }
+
+    const dostepneDiv = document.getElementById("dostepne");
+    const wTrakcieDiv = document.getElementById("wtrakcie");
+    const zrealizowaneDiv = document.getElementById("zrealizowane");
+
+    function wyloguj() {
+      localStorage.clear();
+      window.location.href = "index.html";
+    }
+
+    function renderZgloszenie(doc, container, pokazPrzejmij = false, pokazRaport = false) {
+      const data = doc.data();
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <strong>${data.name}</strong><br />
+        ${data.miasto}, ${data.ulica}<br />
+        Kod: ${data.kod}<br />
+        Telefon: ${data.phone}<br />
+        <div>Dodane przez: ${data.utworzonyPrzez}</div>
+        <div>Status: ${data.status}</div>
+      `;
+
+      if (pokazPrzejmij) {
+        const btn = document.createElement("button");
+        btn.textContent = "Przejmij zgłoszenie";
+        btn.onclick = async () => {
+          await db.collection("tasks").doc(doc.id).update({
+            status: "W trakcie",
+            przypisanyAgent: agent,
+            przejeto: new Date()
+          });
+          wczytajZgloszenia();
+        };
+        div.appendChild(btn);
+      }
+
+      if (pokazRaport) {
+        const btn = document.createElement("button");
+        btn.textContent = "Uzupełnij raport";
+        btn.onclick = () => pokazRaportModal(doc.id);
+        div.appendChild(btn);
+      }
+
+      container.appendChild(div);
+    }
+
+    async function wczytajZgloszenia() {
+      dostepneDiv.innerHTML = "";
+      wTrakcieDiv.innerHTML = "";
+      zrealizowaneDiv.innerHTML = "";
+
+      const snapshot = await db.collection("tasks").get();
+
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        if (d.status === "Dostępne" && !d.przypisanyAgent) {
+          renderZgloszenie(doc, dostepneDiv, true);
+        } else if (d.status === "W trakcie" && d.przypisanyAgent === agent) {
+          renderZgloszenie(doc, wTrakcieDiv, false, true);
+        } else if (d.status === "Zrealizowane" && d.przypisanyAgent === agent) {
+          renderZgloszenie(doc, zrealizowaneDiv);
+        }
+      });
+    }
+
+    wczytajZgloszenia();
+
+    function pokazRaportModal(idZgloszenia) {
+      const modal = document.getElementById("formularzModal");
+      modal.style.display = "flex";
+      modal.dataset.docid = idZgloszenia;
+    }
+
+    document.getElementById("formularzRaport").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const docId = document.getElementById("formularzModal").dataset.docid;
+      const status = document.getElementById("umowa").value;
+      const uwagi = document.getElementById("uwagi").value;
+
+      const nowyStatus = "Zrealizowane";
+
+      await db.collection("tasks").doc(docId).update({
+        status: nowyStatus,
+        raport: {
+          wynik: status,
+          uwagi: uwagi,
+          raportowano: new Date()
+        }
+      });
+
+      document.getElementById("formularzModal").style.display = "none";
+      document.getElementById("formularzRaport").reset();
+      wczytajZgloszenia();
+    });
+
+    window.onclick = function(event) {
+      const modal = document.getElementById("formularzModal");
+      if (event.target == modal) {
+        modal.style.display = "none";
+      }
+    }
+  </script>
+</body>
+</html>
